@@ -55,21 +55,30 @@ exports.onSuggestionWritten = functions.firestore
   .document("Suggestions/{docId}")
   .onWrite(async (change, context) => {
 
-    // ignore if it's just popularity that's being updated (to avoid infinite calls)
-    let likesBefore = change.before.data().likes;
-    let dateCreatedBefore = change.before.data().dateCreated;
+    // so in the case of update on existing document
+    if (change.before.exists) {
+      // ignore if it's just popularity that's being updated (to avoid infinite calls)
+      let likesBefore = change.before.data().likes;
+      let dateCreatedBefore = change.before.data().dateCreated;
 
-    let likesAfter = change.after.data().likes;
-    let dateCreatedAfter = change.after.data().dateCreated;
+      let likesAfter = change.after.data().likes;
+      let dateCreatedAfter = change.after.data().dateCreated;
 
-    // so only execute in the case that popularity score SHOULD change
-    if (!((likesBefore === likesAfter) && (dateCreatedBefore.isEqual(dateCreatedAfter)))) {
-      let popularityParams = await getPopularityParams();
-      let likes = change.after.data().likes;
-      let dateCreated = change.after.data().dateCreated.toDate();
-      const passedDays = daysPassed(dateCreated);
-      const calculatedPopularity = calculatePopularity(likes, passedDays, popularityParams[0], popularityParams[1]);
-      return suggestionsRef.doc(context.params.docId).update({ popularity: calculatedPopularity });
+      if ((likesBefore === likesAfter) && (dateCreatedBefore.isEqual(dateCreatedAfter))) {
+        return null;
+      }
+
     }
-    return null;
+
+    /* 
+      - reaches here if: creation of new document (definitely needs popularity then) or 
+      popularity-related fields of existing document occur 
+      - therefore, only executes in the case that popularity score SHOULD change
+    */
+    let popularityParams = await getPopularityParams();
+    let likes = change.after.data().likes;
+    let dateCreated = change.after.data().dateCreated.toDate();
+    const passedDays = daysPassed(dateCreated);
+    const calculatedPopularity = calculatePopularity(likes, passedDays, popularityParams[0], popularityParams[1]);
+    return suggestionsRef.doc(context.params.docId).update({ popularity: calculatedPopularity });
   });
